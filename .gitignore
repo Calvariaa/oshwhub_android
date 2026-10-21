@@ -1,0 +1,16 @@
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/build
+/app/build
+/captures
+.externalNativeBuild
+.cxx
+.kotlin/
+local.properties
+
+# 逆向期抓包 / 截图 / 浏览器 profile（可能含登录 cookie），不入库
+_tmp/
+*.hprof

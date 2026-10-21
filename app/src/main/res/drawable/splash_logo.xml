@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  启动展示图：Android 12+ 系统启动画面（SplashScreen）的前景。
+  画布 240dp，可见内容收在中圈 ~112dp 内，系统按 2/3 安全区裁切也不会切到引脚。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="240dp"
+    android:height="240dp"
+    android:viewportWidth="240"
+    android:viewportHeight="240">
+
+    <!-- 芯片本体：白色环 + 内孔透出底色 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M106,84h28a22,22 0 0 1 22,22v28a22,22 0 0 1 -22,22h-28a22,22 0 0 1 -22,-22v-28a22,22 0 0 1 22,-22zM114,104.5h12a10.5,10.5 0 0 1 10.5,10.5v10a10.5,10.5 0 0 1 -10.5,10.5h-12a10.5,10.5 0 0 1 -10.5,-10.5v-10a10.5,10.5 0 0 1 10.5,-10.5z" />
+
+    <!-- 引脚 -->
+    <path
+        android:pathData="M106,66L106,88M134,66L134,88M106,152L106,174M134,152L134,174M66,106L88,106M66,134L88,134M152,106L174,106M152,134L174,134"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeWidth="9" />
+
+    <!-- 两段电光弧：启动画面多一点动势 -->
+    <path
+        android:pathData="M120,56A64,64 0 0 1 184,120"
+        android:strokeColor="#67E8F9"
+        android:strokeLineCap="round"
+        android:strokeWidth="5" />
+    <path
+        android:pathData="M120,184A64,64 0 0 1 56,120"
+        android:strokeColor="#93B4FF"
+        android:strokeLineCap="round"
+        android:strokeWidth="5" />
+</vector>

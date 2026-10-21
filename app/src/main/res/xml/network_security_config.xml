@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+    <!-- oshwhub 相关域名统一走 HTTPS -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">oshwhub.com</domain>
+        <domain includeSubdomains="true">lceda.cn</domain>
+        <domain includeSubdomains="true">jlc.com</domain>
+    </domain-config>
+</network-security-config>

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="osh_surface">#FFFBFE</color>
+    <color name="osh_surface_dark">#101014</color>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+
+    <!-- 图标 / 启动画面 -->
+    <color name="osh_brand_deep">#0B1220</color>
+    <color name="osh_brand_blue">#1D6FE0</color>
+    <color name="osh_brand_cyan">#22D3EE</color>
+    <color name="splash_bg">#0B1220</color>
+    <color name="splash_icon_bg">#123A8F</color>
+</resources>

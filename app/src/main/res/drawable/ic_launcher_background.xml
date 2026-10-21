@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 图标背景：深海军蓝 → 电光蓝 → 青色，暗底白芯更醒目 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:pathData="M0,0h108v108h-108z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="4"
+                android:startY="0"
+                android:endX="104"
+                android:endY="108">
+                <item android:color="#0B1220" android:offset="0.0" />
+                <item android:color="#123A8F" android:offset="0.45" />
+                <item android:color="#1D6FE0" android:offset="0.78" />
+                <item android:color="#22D3EE" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- 右上柔光，避免整块渐变显得像塑料 -->
+    <path android:pathData="M108,0L108,60A60,60 0 0,1 48,0Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:centerX="98"
+                android:centerY="10"
+                android:gradientRadius="62">
+                <item android:color="#30FFFFFF" android:offset="0.0" />
+                <item android:color="#00FFFFFF" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+</vector>

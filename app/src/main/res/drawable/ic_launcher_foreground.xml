@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  前景：立创开源的“开源硬件芯片”标记 —— 圆角芯片环 + 8 根圆头引脚。
+  全部落在自适应图标 66dp 安全区内，任何遮罩形状（圆 / 方 / 圆角方 / 水滴）都不会切到引脚。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 芯片本体：外框 + 内孔（evenOdd 挖空成环） -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M48,39h12a9,9 0 0 1 9,9v12a9,9 0 0 1 -9,9h-12a9,9 0 0 1 -9,-9v-12a9,9 0 0 1 9,-9zM52,47.5h4a4.5,4.5 0 0 1 4.5,4.5v4a4.5,4.5 0 0 1 -4.5,4.5h-4a4.5,4.5 0 0 1 -4.5,-4.5v-4a4.5,4.5 0 0 1 4.5,-4.5z" />
+
+    <!-- 引脚：圆头描边 = 焊盘感 -->
+    <path
+        android:pathData="M48,31.5L48,40M60,31.5L60,40M48,68L48,76.5M60,68L60,76.5M31.5,48L40,48M31.5,60L40,60M68,48L76.5,48M68,60L76.5,60"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeWidth="4" />
+</vector>

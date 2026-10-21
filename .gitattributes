@@ -1,0 +1,13 @@
+# 统一换行：仓库内以 LF 存储，检出时 Windows 转 CRLF
+* text=auto
+
+*.kt   text
+*.kts  text
+*.xml  text
+*.md   text
+*.pro  text
+*.toml text
+gradlew text eol=lf
+*.jar  binary
+*.png  binary
+*.webp binary
