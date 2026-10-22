@@ -217,24 +217,77 @@ jobs:
           prerelease: ${{ contains(env.VERSION_NAME, '-') }}
 
       # 再追加一段按 conventional commit 分组的提交清单：直推 master 不带 PR 时，自动 notes
-      # 里只有 Full Changelog 链接，这一段才是真正能读的变更说明
+      # 里只有 Full Changelog 链接，这一段才是真正能读的变更说明。
+      # 直接用 REST 而不是 `gh api -F body=@file`：-F 会把 @file 当上传处理，release PATCH
+      # 不接受这种形式，服务端只回一个语焉不详的 404。这里自己拼 JSON，并且 --retry 兜住
+      # release 刚创建时的短暂可见性延迟。
       - name: Append commit changelog to release notes
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          PREV="$(git describe --tags --abbrev=0 --match 'v[0-9]*' "${GITHUB_REF_NAME}^" 2>/dev/null || true)"
+          PREV="$(git describe --tags --abbrev=0 --match 'v[0-9]*' "${TAG_NAME}^" 2>/dev/null || true)"
           if [ -n "$PREV" ]; then RANGE="${PREV}..HEAD"; else RANGE="HEAD"; fi
           echo "changelog range: $RANGE (prev=${PREV:-<none>})"
-          python3 .github/scripts/changelog.py --range "$RANGE" > "$RUNNER_TEMP/commits.md" || true
+          python3 .github/scripts/changelog.py --range "$RANGE" > "$RUNNER_TEMP/commits.md"
           if [ ! -s "$RUNNER_TEMP/commits.md" ]; then
             echo "没有可追加的提交清单，跳过"
             exit 0
           fi
-          gh api "/repos/${GITHUB_REPOSITORY}/releases/tags/${GITHUB_REF_NAME}" --jq '.body // ""' \
-            > "$RUNNER_TEMP/body.md" || true
-          { cat "$RUNNER_TEMP/body.md"; echo; cat "$RUNNER_TEMP/commits.md"; } > "$RUNNER_TEMP/body-new.md"
-          gh api -X PATCH "/repos/${GITHUB_REPOSITORY}/releases/tags/${GITHUB_REF_NAME}" \
-            -F body=@"$RUNNER_TEMP/body-new.md"
-          echo "release notes 已追加提交清单" >> "$GITHUB_STEP_SUMMARY"
+          python3 - "$TAG_NAME" "$RUNNER_TEMP/commits.md" <<'PY'
+          import json, os, sys, time, urllib.error, urllib.request
+
+          tag, commits_path = sys.argv[1], sys.argv[2]
+          token = os.environ["GH_TOKEN"]
+          repo = os.environ["GITHUB_REPOSITORY"]
+          api = f"https://api.github.com/repos/{repo}/releases/tags/{tag}"
+          hdr = {
+              "Authorization": f"Bearer {token}",
+              "Accept": "application/vnd.github+json",
+              "X-GitHub-Api-Version": "2022-11-28",
+              "User-Agent": "oshwhub-ci",
+          }
+          marker = "<!-- oshwhub-commit-changelog -->"
+
+          def call(url, method="GET", payload=None):
+              data = json.dumps(payload).encode() if payload is not None else None
+              h = dict(hdr)
+              if data is not None:
+                  h["Content-Type"] = "application/json"
+              req = urllib.request.Request(url, data=data, headers=h, method=method)
+              with urllib.request.urlopen(req, timeout=30) as r:
+                  raw = r.read().decode()
+                  return json.loads(raw) if raw.strip() else {}
+
+          rel = None
+          for attempt in range(1, 6):
+              try:
+                  rel = call(api)
+                  break
+              except urllib.error.HTTPError as e:
+                  detail = e.read().decode()[:200]
+                  print(f"读取 release 第 {attempt} 次失败 {e.code}: {detail}")
+                  if e.code in (403, 404) and attempt < 5:
+                      time.sleep(3 * attempt)
+                      continue
+                  sys.exit(0) if e.code in (403, 404) else sys.exit(1)
+
+          if rel is None:
+              print("::warning::拿不到 release，跳过追加（APK 已上传，不影响产物）")
+              sys.exit(0)
+
+          old = (rel.get("body") or "").rstrip()
+          if marker in old:
+              old = old.split(marker)[0].rstrip()
+          commits = open(commits_path, encoding="utf-8").read().strip()
+          body = f"{old}\n\n{marker}\n{commits}\n" if old else f"{commits}\n"
+
+          try:
+              call(api, "PATCH", {"body": body})
+              print("release notes 已追加提交清单")
+          except urllib.error.HTTPError as e:
+              print(f"::warning::PATCH 失败 {e.code}: {e.read().decode()[:300]}")
+          PY
+          echo "release notes 追加完成" >> "$GITHUB_STEP_SUMMARY"
