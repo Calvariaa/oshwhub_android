@@ -1,0 +1,47 @@
+# GitHub「自动生成 Release notes」的分组规则（只对合并进来的 Pull Request 生效）。
+# 生效位置：workflow 里 softprops/action-gh-release 的 generate_release_notes: true。
+# 直推 master 的提交不在这里出现 —— 那部分由 .github/scripts/changelog.py 追加。
+# 说明：https://docs.github.com/repositories/releasing-projects-on-github/automatically-generated-release-notes
+changelog:
+  exclude:
+    labels:
+      - ignore-for-release
+      - skip-changelog
+    authors:
+      - dependabot
+      - github-actions
+  categories:
+    - title: ⚠️ 破坏性变更
+      labels:
+        - breaking
+        - breaking-change
+    - title: 🚀 新功能
+      labels:
+        - feature
+        - feat
+        - enhancement
+    - title: 🐛 修复
+      labels:
+        - fix
+        - bugfix
+        - bug
+    - title: 🎨 界面 / 体验
+      labels:
+        - ui
+        - ux
+    - title: ⚡ 性能
+      labels:
+        - perf
+        - performance
+    - title: 🔧 构建 / CI / 依赖
+      labels:
+        - ci
+        - build
+        - dependencies
+    - title: 📝 文档
+      labels:
+        - documentation
+        - docs
+    - title: 📦 其他变更
+      labels:
+        - "*"

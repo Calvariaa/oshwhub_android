@@ -5,6 +5,10 @@
 .DS_Store
 /build
 /app/build
+# AGP 9 的 release 产物直接落在 app/release（不是 app/build/outputs 下），别让它进 git
+/app/release
+# 本地跑 workflow 里的「签名 + 改名」步骤时会在这里产出 apk / sha256
+/dist
 /captures
 .externalNativeBuild
 .cxx
