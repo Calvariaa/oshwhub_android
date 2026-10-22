@@ -505,6 +505,10 @@ data class Notification(
 @Serializable
 data class UnreadCount(val count: Int = 0)
 
+/** `/api/common/{projects|articles}/getUuidByPath` 的返回：只有 uuid */
+@Serializable
+data class PathUuid(val uuid: String = "")
+
 /** 搜索命中：type = project / user / article / post */
 @Serializable
 data class SearchPage(

@@ -1,5 +1,6 @@
 package io.github.Calvariaa.oshwhub.ui.notification
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.DoneAll
@@ -39,10 +41,15 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.Calvariaa.oshwhub.data.OshApi
+import io.github.Calvariaa.oshwhub.data.SessionManager
 import io.github.Calvariaa.oshwhub.data.model.Notification
+import io.github.Calvariaa.oshwhub.ui.NavTarget
+import io.github.Calvariaa.oshwhub.ui.components.Avatar
 import io.github.Calvariaa.oshwhub.ui.components.EmptyState
 import io.github.Calvariaa.oshwhub.ui.components.ErrorState
 import io.github.Calvariaa.oshwhub.ui.components.LoadingBox
+import io.github.Calvariaa.oshwhub.ui.resolveNavTarget
+import io.github.Calvariaa.oshwhub.util.DeepLink
 import io.github.Calvariaa.oshwhub.util.Fmt
 import io.github.Calvariaa.oshwhub.util.Html
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -58,7 +65,13 @@ data class NotifyItem(
     val time: String,
     val read: Boolean,
     val type: String,
+    val senderAvatar: String = "",
+    val senderName: String = "",
+    /** 正文里第一个站内链接，点开时用它定位目标 */
+    val link: String = "",
 )
+
+/** 点开一条消息要落到的原生页面（定义在 ui/NavTarget.kt，这里直接用） */
 
 data class NotifyState(
     val loading: Boolean = true,
@@ -71,7 +84,10 @@ data class NotifyState(
     val needLogin: Boolean = false,
 )
 
-class NotificationViewModel(private val api: OshApi) : ViewModel() {
+class NotificationViewModel(
+    private val api: OshApi,
+    private val session: SessionManager,
+) : ViewModel() {
 
     private val _state = MutableStateFlow(NotifyState())
     val state: StateFlow<NotifyState> = _state.asStateFlow()
@@ -115,12 +131,59 @@ class NotificationViewModel(private val api: OshApi) : ViewModel() {
         viewModelScope.launch {
             runCatching { api.markNotificationsRead(uuids) }
             _state.value = _state.value.copy(items = _state.value.items.map { it.copy(read = true) })
-            runCatching { api.unreadCount() }
+            // 前一条信息：角标必须跟着变 —— 本地先清零，再与服务端对齐
+            session.onAllNotificationsRead()
         }
+    }
+
+    /**
+     * 点单条：先标已读（服务端 + 本地 + 角标），再解析目标页跳转。
+     * 解析失败就退到内置 WebView，不再甩给系统浏览器。
+     */
+    fun open(item: NotifyItem, onNavigate: (NavTarget) -> Unit) {
+        viewModelScope.launch {
+            if (!item.read) {
+                runCatching { api.markNotificationsRead(listOf(item.uuid)) }
+                _state.value = _state.value.copy(
+                    items = _state.value.items.map { if (it.uuid == item.uuid) it.copy(read = true) else it },
+                )
+                session.onNotificationsRead(1)
+            }
+            val target = resolve(item)
+            if (target != null) {
+                onNavigate(target)
+            } else {
+                session.notify("这条消息没有可跳转的内容")
+            }
+        }
+    }
+
+    /** 把消息正文里的链接换成原生页面；没链接就按消息类型 + 发送者兜底。 */
+    private suspend fun resolve(item: NotifyItem): NavTarget? {
+        if (item.link.isNotBlank()) {
+            resolveNavTarget(api, item.link)?.let { return it }
+        }
+        // 关注/私信没有链接时落到发送者主页
+        if (item.type.contains("follow", true) || item.type.contains("message", true)) {
+            api.userIdByName(item.senderName)?.let { return NavTarget.User(it) }
+        }
+        return null
     }
 
     private suspend fun fetch(page: Int, append: Boolean) {
         val spec = tabs.getOrNull(_state.value.tab) ?: tabs.first()
+        // 未登录时接口返回空数组，看起来像"没有消息"，这里直接给登录引导
+        if (!session.isLoggedIn) {
+            _state.value = _state.value.copy(
+                loading = false,
+                loadingMore = false,
+                error = null,
+                needLogin = true,
+                items = emptyList(),
+                hasMore = false,
+            )
+            return
+        }
         runCatching {
             api.notifications(
                 type = spec.type,
@@ -159,6 +222,9 @@ class NotificationViewModel(private val api: OshApi) : ViewModel() {
         time = Fmt.relative(notification.created_at),
         read = !notification.unread,
         type = notification.type,
+        senderAvatar = notification.sender?.avatar.orEmpty(),
+        senderName = notification.sender?.nickname?.ifBlank { notification.sender?.username.orEmpty() }.orEmpty(),
+        link = DeepLink.firstLink(notification.content).orEmpty(),
     )
 
     private fun titleFromType(type: String): String = when {
@@ -181,6 +247,7 @@ fun NotificationsScreen(
     vm: NotificationViewModel,
     onBack: () -> Unit,
     onLogin: () -> Unit,
+    onNavigate: (NavTarget) -> Unit,
 ) {
     val state by vm.state.collectAsState()
     val listState = rememberLazyListState()
@@ -237,7 +304,9 @@ fun NotificationsScreen(
                 state = listState,
                 contentPadding = PaddingValues(vertical = 8.dp),
             ) {
-                items(state.items, key = { it.uuid }) { item -> NotifyRow(item) }
+                items(state.items, key = { it.uuid }) { item ->
+                    NotifyRow(item = item, onClick = { vm.open(item, onNavigate) })
+                }
                 if (state.loadingMore) {
                     item {
                         Row(
@@ -254,47 +323,53 @@ fun NotificationsScreen(
 }
 
 @Composable
-private fun NotifyRow(item: NotifyItem) {
+private fun NotifyRow(item: NotifyItem, onClick: () -> Unit) {
     Surface(
         color = if (item.read) MaterialTheme.colorScheme.surface
         else MaterialTheme.colorScheme.surfaceContainerLow,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
     ) {
-        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (!item.read) {
-                    Surface(
-                        shape = MaterialTheme.shapes.small,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(end = 6.dp),
-                    ) {
-                        Spacer(Modifier.width(6.dp).height(6.dp))
-                    }
-                }
-                Text(
-                    item.title,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
-                Spacer(Modifier.weight(1f))
-                Text(
-                    item.time,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            if (item.senderAvatar.isNotBlank()) {
+                Avatar(item.senderAvatar, size = 36)
+                Spacer(Modifier.width(12.dp))
             }
-            if (item.content.isNotBlank()) {
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    Html.toPlain(item.content),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis,
-                )
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (!item.read) {
+                        Surface(
+                            shape = RoundedCornerShape(50),
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(end = 6.dp),
+                        ) {
+                            Spacer(Modifier.size(6.dp))
+                        }
+                    }
+                    Text(
+                        item.title,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        item.time,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (item.content.isNotBlank()) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        Html.toPlain(item.content),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
         }
     }

@@ -7,11 +7,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -26,26 +30,48 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import io.github.Calvariaa.oshwhub.BuildConfig
 import io.github.Calvariaa.oshwhub.data.SettingsStore
+import io.github.Calvariaa.oshwhub.data.UpdateChecker
+import io.github.Calvariaa.oshwhub.data.UpdateResult
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 @Composable
 fun SettingsScreen(
     settings: SettingsStore,
+    updates: UpdateChecker,
     onBack: () -> Unit,
     onClearHistory: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
+    val uri = LocalUriHandler.current
     val themeMode by settings.themeMode.collectAsState(initial = "system")
     val dynamic by settings.dynamicColor.collectAsState(initial = true)
     val pureBlack by settings.pureBlack.collectAsState(initial = false)
     val columns by settings.gridColumns.collectAsState(initial = 2)
+
+    var checking by remember { mutableStateOf(false) }
+    var updateState by remember { mutableStateOf<UpdateResult?>(null) }
+
+    fun check() {
+        if (checking) return
+        checking = true
+        updateState = null
+        scope.launch {
+            updateState = updates.check()
+            checking = false
+        }
+    }
 
     Column(
         Modifier
@@ -96,6 +122,43 @@ fun SettingsScreen(
 
             HorizontalDivider(Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
             SectionTitle("关于")
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("当前版本", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        BuildConfig.VERSION_NAME,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (checking) {
+                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(8.dp))
+                }
+                TextButton(onClick = ::check, enabled = !checking) { Text("检查更新") }
+            }
+            updateState?.let { result ->
+                val (message, target) = when (result) {
+                    is UpdateResult.UpToDate -> "已是最新版本（${result.latestVersion}）" to null
+                    is UpdateResult.Available -> "发现新版本 ${result.latestVersion}" to result.release.htmlUrl
+                    is UpdateResult.Failed -> "检查失败：${result.message}" to null
+                }
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (result is UpdateResult.Available) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (target != null) {
+                        TextButton(onClick = { uri.openUri(target) }) {
+                            Text("去下载")
+                            Icon(Icons.Filled.OpenInNew, null, Modifier.size(16.dp))
+                        }
+                    }
+                }
+            }
             Text(
                 "立创开源 (oshwhub) 第三方客户端\n" +
                     "· 数据全部来自 https://oshwhub.com 的 web 接口\n" +
@@ -105,6 +168,40 @@ fun SettingsScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(40.dp))
+        }
+    }
+
+    // 发现新版本时给一个更醒目的确认框（内容来自 Release 正文）
+    (updateState as? UpdateResult.Available)?.let { result ->
+        var dismissed by remember(result) { mutableStateOf(false) }
+        if (!dismissed) {
+            AlertDialog(
+                onDismissRequest = { dismissed = true },
+                title = { Text("发现新版本 ${result.latestVersion}") },
+                text = {
+                    Column(Modifier.verticalScroll(rememberScrollState())) {
+                        Text(
+                            result.release.name.ifBlank { result.release.tagName },
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            result.release.body.take(1500).ifBlank { "查看 Release 页面了解更新内容。" },
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        dismissed = true
+                        uri.openUri(result.release.htmlUrl)
+                    }) { Text("去 GitHub 下载") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { dismissed = true }) { Text("稍后") }
+                },
+            )
         }
     }
 }

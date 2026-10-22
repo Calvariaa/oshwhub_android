@@ -24,12 +24,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -206,9 +209,27 @@ private fun inline(text: String, baseColor: Color = Color.Unspecified): Annotate
                             if (closeParen > 0) {
                                 flush()
                                 val label = text.substring(i + 1, closeBracket)
-                                pushStyle(SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline))
-                                append(label)
-                                pop()
+                                val href = text.substring(closeBracket + 2, closeParen)
+                                    .trim()
+                                    .substringBefore(' ')
+                                // LinkAnnotation 而不是自己画下划线：点击会被 LocalUriHandler 接住
+                                if (href.isNotBlank()) {
+                                    withLink(
+                                        LinkAnnotation.Url(
+                                            url = href,
+                                            styles = TextLinkStyles(
+                                                style = SpanStyle(
+                                                    color = linkColor,
+                                                    textDecoration = TextDecoration.Underline,
+                                                ),
+                                            ),
+                                        )
+                                    ) { append(label) }
+                                } else {
+                                    withStyle(
+                                        SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline)
+                                    ) { append(label) }
+                                }
                                 i = closeParen + 1
                             } else { sb.append(text[i]); i++ }
                         } else { sb.append(text[i]); i++ }

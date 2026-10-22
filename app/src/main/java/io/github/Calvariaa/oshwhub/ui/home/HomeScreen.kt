@@ -97,7 +97,12 @@ class HomeViewModel(
 
     val user: StateFlow<UserInfo?> = session.user
 
+    /** 顶部铃铛的角标跟会话层未读数走，读完消息立刻生效 */
+    val unread: StateFlow<Int> = session.unread
+
     fun load(force: Boolean = false) {
+        // 每次回到首页顺手对齐一次角标数字
+        session.refreshUnread()
         if (!force && !_state.value.loading && _state.value.error == null && _state.value.featured.isNotEmpty()) return
         viewModelScope.launch {
             _state.value = _state.value.copy(loading = true, error = null)
@@ -150,7 +155,7 @@ fun HomeScreen(
 ) {
     val state by vm.state.collectAsState()
     val user by vm.user.collectAsState()
-    val unread by vm.let { _ -> remember { mutableStateOf(0) } }
+    val unread by vm.unread.collectAsState()
 
     LaunchedEffect(Unit) { vm.load() }
 
@@ -161,6 +166,7 @@ fun HomeScreen(
         item {
             HomeTopBar(
                 user = user,
+                unread = unread,
                 onSearch = onSearch,
                 onNotifications = onNotifications,
                 onLogin = onLogin,
@@ -293,6 +299,7 @@ fun HomeScreen(
 @Composable
 private fun HomeTopBar(
     user: UserInfo?,
+    unread: Int,
     onSearch: () -> Unit,
     onNotifications: () -> Unit,
     onLogin: () -> Unit,
@@ -313,7 +320,11 @@ private fun HomeTopBar(
             )
             Spacer(Modifier.weight(1f))
             IconButton(onClick = onNotifications) {
-                BadgedBox(badge = { }) {
+                if (unread > 0) {
+                    BadgedBox(badge = { Badge { Text(if (unread > 99) "99+" else "$unread") } }) {
+                        Icon(Icons.Filled.Notifications, contentDescription = "消息")
+                    }
+                } else {
                     Icon(Icons.Filled.Notifications, contentDescription = "消息")
                 }
             }

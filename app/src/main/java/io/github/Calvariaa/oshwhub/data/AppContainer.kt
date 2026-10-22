@@ -32,6 +32,7 @@ class AppContainer(context: Context) {
     val settings = SettingsStore(context)
     val session = SessionManager(api, auth, scope)
     val history = LocalHistoryStore(File(root, "history.txt"))
+    val updates = UpdateChecker()
 }
 
 /** 登录态 + 未读计数 + 收藏/点赞的跨页面通知 */
@@ -104,6 +105,27 @@ class SessionManager(
 
     fun notify(message: String) {
         _events.tryEmit(message)
+    }
+
+    /**
+     * 消息被读掉一条/一批之后同步角标。
+     * 直接减本地计数立刻见效，再拉一次接口对齐（失败就保留本地值）。
+     */
+    fun onNotificationsRead(count: Int = 1) {
+        if (count <= 0) return
+        _unread.value = (_unread.value - count).coerceAtLeast(0)
+        scope.launch { runCatching { _unread.value = api.unreadCount() } }
+    }
+
+    /** 全部已读：角标清零，再与服务端对齐 */
+    fun onAllNotificationsRead() {
+        _unread.value = 0
+        scope.launch { runCatching { _unread.value = api.unreadCount() } }
+    }
+
+    fun refreshUnread() {
+        if (!isLoggedIn) return
+        scope.launch { runCatching { _unread.value = api.unreadCount() } }
     }
 
     fun requireLogin(): Boolean {

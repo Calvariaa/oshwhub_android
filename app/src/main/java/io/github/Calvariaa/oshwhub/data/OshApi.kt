@@ -10,6 +10,7 @@ import io.github.Calvariaa.oshwhub.data.model.ForumPost
 import io.github.Calvariaa.oshwhub.data.model.LikeCount
 import io.github.Calvariaa.oshwhub.data.model.Notification
 import io.github.Calvariaa.oshwhub.data.model.Paged
+import io.github.Calvariaa.oshwhub.data.model.PathUuid
 import io.github.Calvariaa.oshwhub.data.model.PortalPicture
 import io.github.Calvariaa.oshwhub.data.model.ProImages
 import io.github.Calvariaa.oshwhub.data.model.ProjectDetail
@@ -25,6 +26,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonPrimitive
@@ -399,6 +401,40 @@ class OshApi(val client: ApiClient) {
 
     suspend fun searchUuidByPath(type: String, path: String): String? =
         runCatching { client.get<String>("/api/common/$type/getUuidByPath", mapOf("path" to path)) }.getOrNull()
+
+    /**
+     * 站点 web 自己就在用这条把 `owner/project` 换成 uuid：
+     * 端点必须是**复数** `/api/common/projects/getUuidByPath`，单数一律 422。
+     * 文章同形（`/api/common/articles/getUuidByPath?path=article_xxx`）。
+     */
+    suspend fun projectUuidByPath(path: String): String? = runCatching {
+        client.get<PathUuid>("/api/common/projects/getUuidByPath", mapOf("path" to path)).uuid.takeIf { it.isNotBlank() }
+    }.getOrNull()
+
+    suspend fun articleUuidByPath(path: String): String? = runCatching {
+        client.get<PathUuid>("/api/common/articles/getUuidByPath", mapOf("path" to path)).uuid.takeIf { it.isNotBlank() }
+    }.getOrNull()
+
+    /** 用户名 → uuid（`/api/users/{username}` 只认 uuid，这里靠搜索接口兜） */
+    suspend fun userIdByName(username: String): String? = runCatching {
+        search(type = "user", keywords = username, pageSize = 10).lists.firstNotNullOfOrNull { element ->
+            val obj = element as? JsonObject ?: return@firstNotNullOfOrNull null
+            val uname = obj["username"]?.jsonPrimitive?.contentOrNull
+            if (uname.equals(username, ignoreCase = true)) obj["uuid"]?.jsonPrimitive?.contentOrNull else null
+        }
+    }.getOrNull()
+
+    /** 活动 path → uuid：没有 getUuidByPath，翻比赛列表比对 path */
+    suspend fun activityUuidByPath(path: String): String? = runCatching {
+        var page = 1
+        while (page <= 5) {
+            val chunk = competitions(page = page, pageSize = 50)
+            chunk.lists.firstOrNull { it.path == path || it.uuid == path }?.let { return it.uuid }
+            if (page >= chunk.totalPage || chunk.lists.isEmpty()) break
+            page++
+        }
+        null
+    }.getOrNull()
 
     suspend fun logout() {
         runCatching { client.postJsonText("/api/logout", JsonObject(emptyMap())) }

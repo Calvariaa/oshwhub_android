@@ -29,12 +29,14 @@ import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSiz
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
@@ -80,6 +82,7 @@ import io.github.Calvariaa.oshwhub.ui.settings.SettingsScreen
 import io.github.Calvariaa.oshwhub.ui.theme.OshTheme
 import io.github.Calvariaa.oshwhub.ui.user.UserScreen
 import io.github.Calvariaa.oshwhub.ui.user.UserViewModel
+import io.github.Calvariaa.oshwhub.ui.web.WebScreen
 
 object Routes {
     const val HOME = "home"
@@ -101,6 +104,9 @@ object Routes {
     const val LOGIN_WEB = "login/web"
     const val SETTINGS = "settings"
     const val HISTORY = "history"
+    const val WEB = "web?url={url}"
+
+    fun web(url: String) = "web?url=${java.net.URLEncoder.encode(url, "UTF-8")}"
 
     fun explore(tag: String? = null) = if (tag.isNullOrBlank()) "explore?tag=" else "explore?tag=$tag"
     fun search(q: String? = null) = if (q.isNullOrBlank()) "search?q=" else "search?q=${java.net.URLEncoder.encode(q, "UTF-8")}"
@@ -159,6 +165,8 @@ private fun AppScaffold(
     val unread by container.session.unread.collectAsState()
     val snackbar = remember { SnackbarHostState() }
     val expanded = widthSizeClass != WindowWidthSizeClass.Compact
+    // 正文/评论里的站内链接全部走原生页面，站外才交给浏览器
+    val uriHandler = rememberSiteUriHandler(navController, container.api)
 
     LaunchedEffect(Unit) {
         container.session.events.collect { message ->
@@ -217,238 +225,260 @@ private fun AppScaffold(
                 }
             }
             Box(Modifier.fillMaxSize()) {
-                NavHost(navController = navController, startDestination = Routes.HOME) {
-                    composable(Routes.HOME) {
-                        val vm: HomeViewModel = viewModel { HomeViewModel(container.api, container.session) }
-                        HomeScreen(
-                            vm = vm,
-                            onSearch = { navController.navigate(Routes.search()) },
-                            onProject = { navController.navigate(Routes.project(it)) },
-                            onActivity = { navController.navigate(Routes.activity(it.uuid)) },
-                            onArticleList = { navController.navigate(Routes.ARTICLES) },
-                            onPostList = { navController.navigate(Routes.POSTS) },
-                            onCollectionList = { navController.navigate(Routes.COLLECTIONS) },
-                            onCollection = { navController.navigate(Routes.collection(it.path.ifBlank { it.uuid })) },
-                            onExplore = { navigateTop(navController, Routes.explore()) },
-                            onNotifications = { navigateTop(navController, Routes.NOTIFICATIONS) },
-                            onLogin = { navController.navigate(Routes.LOGIN) },
-                        )
-                    }
-
-                    composable(
-                        Routes.EXPLORE,
-                        arguments = listOf(navArgument("tag") { type = NavType.StringType; defaultValue = "" }),
-                    ) { entry ->
-                        val tag = entry.arguments?.getString("tag")?.takeIf { it.isNotBlank() }
-                        val vm: ExploreViewModel = viewModel { ExploreViewModel(container.api) }
-                        ExploreScreen(
-                            vm = vm,
-                            initialTag = tag,
-                            columns = columns,
-                            onProject = { navController.navigate(Routes.project(it)) },
-                        )
-                    }
-
-                    composable(
-                        Routes.SEARCH,
-                        arguments = listOf(navArgument("q") { type = NavType.StringType; defaultValue = "" }),
-                    ) { entry ->
-                        val q = entry.arguments?.getString("q")?.takeIf { it.isNotBlank() }
-                        val vm: SearchViewModel = viewModel { SearchViewModel(container.api, container.settings) }
-                        SearchScreen(
-                            vm = vm,
-                            initialQuery = q,
-                            onBack = { navController.popBackStack() },
-                            onProject = { navController.navigate(Routes.project(it)) },
-                            onUser = { navController.navigate(Routes.user(it)) },
-                            onArticle = { navController.navigate(Routes.article(it)) },
-                            onPost = { navController.navigate(Routes.post(it)) },
-                        )
-                    }
-
-                    composable(
-                        Routes.PROJECT,
-                        arguments = listOf(navArgument("uuid") { type = NavType.StringType }),
-                    ) { entry ->
-                        val uuid = entry.arguments?.getString("uuid").orEmpty()
-                        val vm: ProjectViewModel = viewModel(key = "project-$uuid") {
-                            ProjectViewModel(container.api, container.session, uuid)
+                CompositionLocalProvider(LocalUriHandler provides uriHandler) {
+                    NavHost(navController = navController, startDestination = Routes.HOME) {
+                        composable(Routes.HOME) {
+                            val vm: HomeViewModel = viewModel { HomeViewModel(container.api, container.session) }
+                            HomeScreen(
+                                vm = vm,
+                                onSearch = { navController.navigate(Routes.search()) },
+                                onProject = { navController.navigate(Routes.project(it)) },
+                                onActivity = { navController.navigate(Routes.activity(it.uuid)) },
+                                onArticleList = { navController.navigate(Routes.ARTICLES) },
+                                onPostList = { navController.navigate(Routes.POSTS) },
+                                onCollectionList = { navController.navigate(Routes.COLLECTIONS) },
+                                onCollection = { navController.navigate(Routes.collection(it.path.ifBlank { it.uuid })) },
+                                onExplore = { navigateTop(navController, Routes.explore()) },
+                                onNotifications = { navigateTop(navController, Routes.NOTIFICATIONS) },
+                                onLogin = { navController.navigate(Routes.LOGIN) },
+                            )
                         }
-                        ProjectDetailScreen(
-                            vm = vm,
-                            onBack = { navController.popBackStack() },
-                            onUser = { navController.navigate(Routes.user(it)) },
-                            onProject = { navController.navigate(Routes.project(it)) },
-                            onLogin = { navController.navigate(Routes.LOGIN) },
-                        )
-                    }
 
-                    composable(
-                        Routes.USER,
-                        arguments = listOf(navArgument("uuid") { type = NavType.StringType }),
-                    ) { entry ->
-                        val uuid = entry.arguments?.getString("uuid").orEmpty()
-                        val vm: UserViewModel = viewModel(key = "user-$uuid") {
-                            UserViewModel(container.api, container.session, uuid)
+                        composable(
+                            Routes.EXPLORE,
+                            arguments = listOf(navArgument("tag") { type = NavType.StringType; defaultValue = "" }),
+                        ) { entry ->
+                            val tag = entry.arguments?.getString("tag")?.takeIf { it.isNotBlank() }
+                            val vm: ExploreViewModel = viewModel { ExploreViewModel(container.api) }
+                            ExploreScreen(
+                                vm = vm,
+                                initialTag = tag,
+                                columns = columns,
+                                onProject = { navController.navigate(Routes.project(it)) },
+                            )
                         }
-                        UserScreen(
-                            vm = vm,
-                            onBack = { navController.popBackStack() },
-                            onProject = { navController.navigate(Routes.project(it)) },
-                            onArticle = { navController.navigate(Routes.article(it)) },
-                        )
-                    }
 
-                    composable(Routes.ARTICLES) {
-                        val vm: ArticleListViewModel = viewModel { ArticleListViewModel(container.api) }
-                        ArticleListScreen(
-                            vm = vm,
-                            onBack = { navController.popBackStack() },
-                            onArticle = { navController.navigate(Routes.article(it)) },
-                        )
-                    }
-
-                    composable(
-                        Routes.ARTICLE,
-                        arguments = listOf(navArgument("uuid") { type = NavType.StringType }),
-                    ) { entry ->
-                        val uuid = entry.arguments?.getString("uuid").orEmpty()
-                        val vm: ArticleViewModel = viewModel(key = "article-$uuid") {
-                            ArticleViewModel(container.api, uuid)
+                        composable(
+                            Routes.SEARCH,
+                            arguments = listOf(navArgument("q") { type = NavType.StringType; defaultValue = "" }),
+                        ) { entry ->
+                            val q = entry.arguments?.getString("q")?.takeIf { it.isNotBlank() }
+                            val vm: SearchViewModel = viewModel { SearchViewModel(container.api, container.settings) }
+                            SearchScreen(
+                                vm = vm,
+                                initialQuery = q,
+                                onBack = { navController.popBackStack() },
+                                onProject = { navController.navigate(Routes.project(it)) },
+                                onUser = { navController.navigate(Routes.user(it)) },
+                                onArticle = { navController.navigate(Routes.article(it)) },
+                                onPost = { navController.navigate(Routes.post(it)) },
+                            )
                         }
-                        ArticleDetailScreen(
-                            vm = vm,
-                            onBack = { navController.popBackStack() },
-                            onUser = { navController.navigate(Routes.user(it)) },
-                        )
-                    }
 
-                    composable(Routes.POSTS) {
-                        val vm: PostListViewModel = viewModel { PostListViewModel(container.api) }
-                        PostListScreen(
-                            vm = vm,
-                            onBack = { navController.popBackStack() },
-                            onPost = { navController.navigate(Routes.post(it)) },
-                        )
-                    }
-
-                    composable(
-                        Routes.POST,
-                        arguments = listOf(navArgument("uuid") { type = NavType.StringType }),
-                    ) { entry ->
-                        val uuid = entry.arguments?.getString("uuid").orEmpty()
-                        val vm: PostViewModel = viewModel(key = "post-$uuid") { PostViewModel(container.api, uuid) }
-                        PostDetailScreen(vm = vm, onBack = { navController.popBackStack() })
-                    }
-
-                    composable(Routes.COLLECTIONS) {
-                        val vm: CollectionListViewModel = viewModel { CollectionListViewModel(container.api) }
-                        CollectionListScreen(
-                            vm = vm,
-                            onBack = { navController.popBackStack() },
-                            onCollection = { navController.navigate(Routes.collection(it.path.ifBlank { it.uuid })) },
-                        )
-                    }
-
-                    composable(
-                        Routes.COLLECTION,
-                        arguments = listOf(navArgument("key") { type = NavType.StringType }),
-                    ) { entry ->
-                        val key = entry.arguments?.getString("key").orEmpty()
-                        val vm: CollectionViewModel = viewModel(key = "collection-$key") {
-                            CollectionViewModel(container.api, key)
+                        composable(
+                            Routes.PROJECT,
+                            arguments = listOf(navArgument("uuid") { type = NavType.StringType }),
+                        ) { entry ->
+                            val uuid = entry.arguments?.getString("uuid").orEmpty()
+                            val vm: ProjectViewModel = viewModel(key = "project-$uuid") {
+                                ProjectViewModel(container.api, container.session, uuid)
+                            }
+                            ProjectDetailScreen(
+                                vm = vm,
+                                onBack = { navController.popBackStack() },
+                                onUser = { navController.navigate(Routes.user(it)) },
+                                onProject = { navController.navigate(Routes.project(it)) },
+                                onLogin = { navController.navigate(Routes.LOGIN) },
+                            )
                         }
-                        CollectionDetailScreen(
-                            vm = vm,
-                            onBack = { navController.popBackStack() },
-                            onProject = { navController.navigate(Routes.project(it)) },
-                            columns = columns,
-                        )
-                    }
 
-                    composable(Routes.ACTIVITIES) {
-                        val vm: ActivityViewModel = viewModel { ActivityViewModel(container.api) }
-                        ActivityListScreen(
-                            vm = vm,
-                            onBack = { navController.popBackStack() },
-                            onActivity = { navController.navigate(Routes.activity(it.uuid)) },
-                        )
-                    }
-
-                    composable(
-                        Routes.ACTIVITY,
-                        arguments = listOf(navArgument("uuid") { type = NavType.StringType }),
-                    ) { entry ->
-                        val uuid = entry.arguments?.getString("uuid").orEmpty()
-                        val vm: ActivityViewModel = viewModel(key = "activity-$uuid") { ActivityViewModel(container.api) }
-                        ActivityDetailScreen(vm = vm, uuid = uuid, onBack = { navController.popBackStack() })
-                    }
-
-                    composable(Routes.NOTIFICATIONS) {
-                        val vm: NotificationViewModel = viewModel { NotificationViewModel(container.api) }
-                        NotificationsScreen(
-                            vm = vm,
-                            onBack = { navController.popBackStack() },
-                            onLogin = { navController.navigate(Routes.LOGIN) },
-                        )
-                    }
-
-                    composable(Routes.MINE) {
-                        val vm: MineViewModel = viewModel {
-                            MineViewModel(container.api, container.session, container.history)
+                        composable(
+                            Routes.USER,
+                            arguments = listOf(navArgument("uuid") { type = NavType.StringType }),
+                        ) { entry ->
+                            val uuid = entry.arguments?.getString("uuid").orEmpty()
+                            val vm: UserViewModel = viewModel(key = "user-$uuid") {
+                                UserViewModel(container.api, container.session, uuid)
+                            }
+                            UserScreen(
+                                vm = vm,
+                                onBack = { navController.popBackStack() },
+                                onProject = { navController.navigate(Routes.project(it)) },
+                                onArticle = { navController.navigate(Routes.article(it)) },
+                            )
                         }
-                        MineScreen(
-                            vm = vm,
-                            onLogin = { navController.navigate(Routes.LOGIN) },
-                            onProject = { navController.navigate(Routes.project(it)) },
-                            onArticle = { navController.navigate(Routes.article(it)) },
-                            onCollection = { navController.navigate(Routes.collection(it.path.ifBlank { it.uuid })) },
-                            onUser = { navController.navigate(Routes.user(it)) },
-                            onNotifications = { navigateTop(navController, Routes.NOTIFICATIONS) },
-                            onSettings = { navController.navigate(Routes.SETTINGS) },
-                            onHistory = { navController.navigate(Routes.HISTORY) },
-                            onFollowList = { navController.navigate(Routes.user(container.session.user.value?.uuid ?: "")) },
-                        )
-                    }
 
-                    composable(Routes.LOGIN) {
-                        val vm: LoginViewModel = viewModel { LoginViewModel(container.session) }
-                        LoginScreen(
-                            vm = vm,
-                            onBack = { navController.popBackStack() },
-                            onLoggedIn = { navController.popBackStack() },
-                            onWebLogin = { navController.navigate(Routes.LOGIN_WEB) },
-                        )
-                    }
+                        composable(Routes.ARTICLES) {
+                            val vm: ArticleListViewModel = viewModel { ArticleListViewModel(container.api) }
+                            ArticleListScreen(
+                                vm = vm,
+                                onBack = { navController.popBackStack() },
+                                onArticle = { navController.navigate(Routes.article(it)) },
+                            )
+                        }
 
-                    composable(Routes.LOGIN_WEB) {
-                        WebLoginScreen(
-                            session = container.session,
-                            cookieStore = container.cookieStore,
-                            onBack = { navController.popBackStack() },
-                            onLoggedIn = {
-                                runCatching { navController.popBackStack(Routes.LOGIN, inclusive = true) }
-                                if (navController.currentDestination?.route == Routes.LOGIN_WEB) {
-                                    navController.popBackStack()
-                                }
-                            },
-                        )
-                    }
+                        composable(
+                            Routes.ARTICLE,
+                            arguments = listOf(navArgument("uuid") { type = NavType.StringType }),
+                        ) { entry ->
+                            val uuid = entry.arguments?.getString("uuid").orEmpty()
+                            val vm: ArticleViewModel = viewModel(key = "article-$uuid") {
+                                ArticleViewModel(container.api, uuid)
+                            }
+                            ArticleDetailScreen(
+                                vm = vm,
+                                onBack = { navController.popBackStack() },
+                                onUser = { navController.navigate(Routes.user(it)) },
+                            )
+                        }
 
-                    composable(Routes.SETTINGS) {
-                        SettingsScreen(
-                            settings = container.settings,
-                            onBack = { navController.popBackStack() },
-                            onClearHistory = { container.history.clear() },
-                        )
-                    }
+                        composable(Routes.POSTS) {
+                            val vm: PostListViewModel = viewModel { PostListViewModel(container.api) }
+                            PostListScreen(
+                                vm = vm,
+                                onBack = { navController.popBackStack() },
+                                onPost = { navController.navigate(Routes.post(it)) },
+                            )
+                        }
 
-                    composable(Routes.HISTORY) {
-                        HistoryScreen(
-                            history = container.history,
-                            onBack = { navController.popBackStack() },
-                            onProject = { navController.navigate(Routes.project(it)) },
-                        )
+                        composable(
+                            Routes.POST,
+                            arguments = listOf(navArgument("uuid") { type = NavType.StringType }),
+                        ) { entry ->
+                            val uuid = entry.arguments?.getString("uuid").orEmpty()
+                            val vm: PostViewModel = viewModel(key = "post-$uuid") { PostViewModel(container.api, uuid) }
+                            PostDetailScreen(vm = vm, onBack = { navController.popBackStack() })
+                        }
+
+                        composable(Routes.COLLECTIONS) {
+                            val vm: CollectionListViewModel = viewModel { CollectionListViewModel(container.api) }
+                            CollectionListScreen(
+                                vm = vm,
+                                onBack = { navController.popBackStack() },
+                                onCollection = { navController.navigate(Routes.collection(it.path.ifBlank { it.uuid })) },
+                            )
+                        }
+
+                        composable(
+                            Routes.COLLECTION,
+                            arguments = listOf(navArgument("key") { type = NavType.StringType }),
+                        ) { entry ->
+                            val key = entry.arguments?.getString("key").orEmpty()
+                            val vm: CollectionViewModel = viewModel(key = "collection-$key") {
+                                CollectionViewModel(container.api, key)
+                            }
+                            CollectionDetailScreen(
+                                vm = vm,
+                                onBack = { navController.popBackStack() },
+                                onProject = { navController.navigate(Routes.project(it)) },
+                                columns = columns,
+                            )
+                        }
+
+                        composable(Routes.ACTIVITIES) {
+                            val vm: ActivityViewModel = viewModel { ActivityViewModel(container.api) }
+                            ActivityListScreen(
+                                vm = vm,
+                                onBack = { navController.popBackStack() },
+                                onActivity = { navController.navigate(Routes.activity(it.uuid)) },
+                            )
+                        }
+
+                        composable(
+                            Routes.ACTIVITY,
+                            arguments = listOf(navArgument("uuid") { type = NavType.StringType }),
+                        ) { entry ->
+                            val uuid = entry.arguments?.getString("uuid").orEmpty()
+                            val vm: ActivityViewModel = viewModel(key = "activity-$uuid") { ActivityViewModel(container.api) }
+                            ActivityDetailScreen(
+                                vm = vm,
+                                uuid = uuid,
+                                onBack = { navController.popBackStack() },
+                                onOpenWeb = { navController.navigate(Routes.web(it)) },
+                            )
+                        }
+
+                        composable(Routes.NOTIFICATIONS) {
+                            val vm: NotificationViewModel = viewModel {
+                                NotificationViewModel(container.api, container.session)
+                            }
+                            NotificationsScreen(
+                                vm = vm,
+                                onBack = {
+                                    // 消息是"顶层 tab"，返回就回首页，别把空栈留给系统
+                                    if (!navController.popBackStack()) navigateTop(navController, Routes.HOME)
+                                },
+                                onLogin = { navController.navigate(Routes.LOGIN) },
+                                onNavigate = { target -> navigateTarget(navController, target) },
+                            )
+                        }
+
+                        composable(Routes.MINE) {
+                            val vm: MineViewModel = viewModel {
+                                MineViewModel(container.api, container.session, container.history)
+                            }
+                            MineScreen(
+                                vm = vm,
+                                onLogin = { navController.navigate(Routes.LOGIN) },
+                                onProject = { navController.navigate(Routes.project(it)) },
+                                onArticle = { navController.navigate(Routes.article(it)) },
+                                onCollection = { navController.navigate(Routes.collection(it.path.ifBlank { it.uuid })) },
+                                onUser = { navController.navigate(Routes.user(it)) },
+                                onNotifications = { navigateTop(navController, Routes.NOTIFICATIONS) },
+                                onSettings = { navController.navigate(Routes.SETTINGS) },
+                                onHistory = { navController.navigate(Routes.HISTORY) },
+                                onFollowList = { navController.navigate(Routes.user(container.session.user.value?.uuid ?: "")) },
+                            )
+                        }
+
+                        composable(Routes.LOGIN) {
+                            val vm: LoginViewModel = viewModel { LoginViewModel(container.session) }
+                            LoginScreen(
+                                vm = vm,
+                                onBack = { navController.popBackStack() },
+                                onLoggedIn = { navController.popBackStack() },
+                                onWebLogin = { navController.navigate(Routes.LOGIN_WEB) },
+                            )
+                        }
+
+                        composable(Routes.LOGIN_WEB) {
+                            WebLoginScreen(
+                                session = container.session,
+                                cookieStore = container.cookieStore,
+                                onBack = { navController.popBackStack() },
+                                onLoggedIn = {
+                                    runCatching { navController.popBackStack(Routes.LOGIN, inclusive = true) }
+                                    if (navController.currentDestination?.route == Routes.LOGIN_WEB) {
+                                        navController.popBackStack()
+                                    }
+                                },
+                            )
+                        }
+
+                        composable(Routes.SETTINGS) {
+                            SettingsScreen(
+                                settings = container.settings,
+                                updates = container.updates,
+                                onBack = { navController.popBackStack() },
+                                onClearHistory = { container.history.clear() },
+                            )
+                        }
+
+                        composable(Routes.HISTORY) {
+                            HistoryScreen(
+                                history = container.history,
+                                onBack = { navController.popBackStack() },
+                                onProject = { navController.navigate(Routes.project(it)) },
+                            )
+                        }
+
+                        composable(
+                            Routes.WEB,
+                            arguments = listOf(navArgument("url") { type = NavType.StringType; defaultValue = "" }),
+                        ) { entry ->
+                            val url = entry.arguments?.getString("url").orEmpty()
+                            WebScreen(url = url, onBack = { navController.popBackStack() })
+                        }
                     }
                 }
             }
@@ -461,4 +491,18 @@ private fun navigateTop(navController: NavHostController, route: String) {
         popUpTo(Routes.HOME) { inclusive = false }
         launchSingleTop = true
     }
+}
+
+/** 消息/正文里的站内链接统一从这里落到原生页面 */
+fun navigateTarget(navController: NavHostController, target: NavTarget) {
+    val route = when (target) {
+        is NavTarget.Project -> Routes.project(target.uuid)
+        is NavTarget.Article -> Routes.article(target.uuid)
+        is NavTarget.User -> Routes.user(target.uuid)
+        is NavTarget.Collection -> Routes.collection(target.key)
+        is NavTarget.Activity -> Routes.activity(target.uuid)
+        is NavTarget.Search -> Routes.search(target.keyword)
+        is NavTarget.Web -> Routes.web(target.url)
+    }
+    navController.navigate(route)
 }

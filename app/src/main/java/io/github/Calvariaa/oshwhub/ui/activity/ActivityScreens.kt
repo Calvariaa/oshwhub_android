@@ -30,7 +30,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
@@ -136,9 +135,8 @@ private fun ActivityCard(activity: Activity, onClick: () -> Unit) {
 }
 
 @Composable
-fun ActivityDetailScreen(vm: ActivityViewModel, uuid: String, onBack: () -> Unit) {
+fun ActivityDetailScreen(vm: ActivityViewModel, uuid: String, onBack: () -> Unit, onOpenWeb: (String) -> Unit) {
     val state by vm.state.collectAsState()
-    val context = LocalContext.current
     LaunchedEffect(Unit) { if (state.activities.isEmpty()) vm.load() }
 
     Column(Modifier.fillMaxSize()) {
@@ -192,13 +190,13 @@ fun ActivityDetailScreen(vm: ActivityViewModel, uuid: String, onBack: () -> Unit
                             onClick = {
                                 val url = if (activity.path.isNotBlank())
                                     "https://oshwhub.com/activities/${activity.path}" else "https://oshwhub.com/activities"
-                                runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, url.toUri())) }
+                                onOpenWeb(url)
                             },
                             shape = RoundedCornerShape(50),
                         ) {
                             Icon(Icons.Filled.OpenInNew, null, Modifier.height(18.dp))
                             Spacer(Modifier.height(0.dp))
-                            Text(" 在浏览器查看活动主页")
+                            Text(" 打开活动主页")
                         }
                         Spacer(Modifier.height(40.dp))
                     }
