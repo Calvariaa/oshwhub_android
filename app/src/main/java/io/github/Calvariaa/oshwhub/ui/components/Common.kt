@@ -28,6 +28,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -392,13 +393,23 @@ fun UserRow(user: UserBrief, onClick: (() -> Unit)? = null, trailing: (@Composab
 }
 
 @Composable
-fun EmptyState(text: String, hint: String? = null, modifier: Modifier = Modifier) {
+fun EmptyState(
+    text: String,
+    hint: String? = null,
+    modifier: Modifier = Modifier,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
+) {
     Box(modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(text, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (hint != null) {
                 Spacer(Modifier.height(6.dp))
                 Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (actionLabel != null && onAction != null) {
+                Spacer(Modifier.height(8.dp))
+                TextButton(onClick = onAction) { Text(actionLabel) }
             }
         }
     }

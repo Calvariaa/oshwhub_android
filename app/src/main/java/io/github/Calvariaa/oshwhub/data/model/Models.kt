@@ -477,6 +477,11 @@ data class UserCounts(
 @Serializable
 data class LikeCount(val uuid: String = "", val likeCount: Int = 0)
 
+/**
+ * `/api/notifications` 的真实返回体只有：
+ * `user, content, type, status, uuid, updated_at, created_at` —— **没有 title、没有 read**。
+ * 已读状态是字符串 `status = "unread"/"read"`，别按布尔 read 判断。
+ */
 @Serializable
 data class Notification(
     val uuid: String = "",
@@ -484,12 +489,18 @@ data class Notification(
     val content: String = "",
     val title: String = "",
     val read: Boolean = false,
+    val status: String = "",
     val created_at: String = "",
-    val sender: UserBrief? = null,
+    @SerialName("updated_at") val updatedAt: String = "",
+    @SerialName("user") val sender: UserBrief? = null,
     val target_uuid: String = "",
     val target_type: String = "",
     val extra: JsonElement? = null,
-)
+) {
+    /** status 为空（老结构）时退回布尔 read。 */
+    val unread: Boolean
+        get() = if (status.isNotBlank()) status.equals("unread", ignoreCase = true) else !read
+}
 
 @Serializable
 data class UnreadCount(val count: Int = 0)

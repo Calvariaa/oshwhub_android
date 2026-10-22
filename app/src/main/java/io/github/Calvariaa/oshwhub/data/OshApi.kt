@@ -359,11 +359,24 @@ class OshApi(val client: ApiClient) {
 
     // ------------------------------------------------------- notifications --
 
-    suspend fun notifications(type: String = "allNotifications", read: Boolean = false, page: Int = 1, pageSize: Int = 20): Paged<Notification> =
-        client.getOrNull<Paged<Notification>>(
-            "/api/notifications",
-            mapOf("type" to type, "read" to read, "page" to page, "pageSize" to pageSize),
-        ) ?: Paged()
+    /**
+     * 站点 header 铃铛下拉固定传 `read=false`（只要未读），照抄会漏掉历史消息：
+     * `read` 省略时后端返回**全部**消息，消息中心列表必须这么调。
+     */
+    suspend fun notifications(
+        type: String = "allNotifications",
+        read: Boolean? = null,
+        page: Int = 1,
+        pageSize: Int = 20,
+    ): Paged<Notification> {
+        val params = buildMap<String, Any?> {
+            put("type", type)
+            if (read != null) put("read", read)
+            put("page", page)
+            put("pageSize", pageSize)
+        }
+        return client.getOrNull<Paged<Notification>>("/api/notifications", params) ?: Paged()
+    }
 
     suspend fun markNotificationsRead(uuids: List<String> = emptyList()) {
         runCatching {
